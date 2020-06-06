@@ -41,7 +41,7 @@ class Makwa:
         self.salt = salt
 
     # 2.3 The KDF
-    def kdf(self, m, s):
+    def __kdf(self, m, s):
         r = self.h.digiest_size
         # 1. V <- 0x01 0x01 0x01 ... 0x01
         V = b'\x01' * r
@@ -66,21 +66,21 @@ class Makwa:
         return T[:s]
 
     # 2.5 Input Pre-Hashing
-    def pre_hashing(self, password):
+    def __pre_hashing(self, password):
         if self.preHashing:
             return self.kdf(password, 64)
         else:
             return password
 
     # 2.7 Post-Hashing
-    def post_hashing(self, hash):
+    def __post_hashing(self, hash):
         if self.t is not None:
             return self.kdf(hash, self.t)
         else:
             return hash
 
     # 2.6 Core Hashing
-    def core_hashing(self, password):
+    def hash(self, password):
         password = self.pre_hashing(password)
         # 1. Let S be the following byte sequence (called the padding):
         # (u = len(password) (in bytes))
