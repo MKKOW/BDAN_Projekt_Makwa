@@ -42,7 +42,7 @@ class Makwa:
 
     # 2.3 The KDF
     def __kdf(self, m, s):
-        r = self.h.digiest_size
+        r = self.h.digiest_size # TODO
         # 1. V <- 0x01 0x01 0x01 ... 0x01
         V = b'\x01' * r
         # 2. K <- 0x00 0x00 0x00 ... 0x00
@@ -68,20 +68,20 @@ class Makwa:
     # 2.5 Input Pre-Hashing
     def __pre_hashing(self, password):
         if self.preHashing:
-            return self.kdf(password, 64)
+            return self.__kdf(password, 64)
         else:
             return password
 
     # 2.7 Post-Hashing
     def __post_hashing(self, hash):
         if self.t is not None:
-            return self.kdf(hash, self.t)
+            return self.__kdf(hash, self.t)
         else:
             return hash
 
     # 2.6 Core Hashing
     def hash(self, password):
-        password = self.pre_hashing(password)
+        password = self.__pre_hashing(password)
         # 1. Let S be the following byte sequence (called the padding):
         # (u = len(password) (in bytes))
         # S = H_(k−2−u)(salt || password || u)
@@ -90,7 +90,7 @@ class Makwa:
         # u must be such that u ≤ 255 and u ≤ k − 32
         if u > 255 or u > k-32:
             raise ValueError('Password is too long')
-        S = self.kdf(self.salt + password + pack('=B', u), k-2-u)
+        S = self.__kdf(self.salt + password + pack('=B', u), k-2-u)
         # 2. Let X be the following byte sequence:
         # X = 0x00 | | S | | π | | u
         X = b'0x00'+S+password+pack('=B', u)
@@ -106,7 +106,7 @@ class Makwa:
         # 5. Encode y with I2OSP into the byte sequence Y of length k bytes.
         Y = encode(y, k)
         # The primary output of MAKWA is Y
-        return self.post_hashing(Y)
+        return self.__post_hashing(Y)
 
 
 def main():
