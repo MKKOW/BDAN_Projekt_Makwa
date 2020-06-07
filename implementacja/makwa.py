@@ -285,6 +285,8 @@ def main():
     print('\nSample KDF test')
     print(bytes_to_str(M256.kdf(b'\x07', 100)))
     print(bytes_to_str(M512.kdf(b'\x07', 100)))
+
+    # Sample password hashing test
     salt = int(
         'C7' '27' '03' 'C2'
         '2A' '96' 'D9' '99'
@@ -296,7 +298,6 @@ def main():
         'EF' '09' '39' '3A'
         'B1' '71' '0A' '08', 16
     )
-    # Sample password hashing test
     print('\nSample password hashing test')
     password = "Gego beshwaji'aaken awe makwa; onzaam naniizaanizi."
     pwd_bytes = bytes(password, 'UTF-8')
