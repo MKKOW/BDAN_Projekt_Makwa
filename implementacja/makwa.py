@@ -1,4 +1,5 @@
 import hmac
+from binascii import b2a_base64, a2b_base64, hexlify, unhexlify
 from hashlib import sha256
 from hashlib import sha512
 from struct import pack, unpack
@@ -28,7 +29,6 @@ def decode(ret_x):
     return x
 
 
-# def makwaPrivateKey(encoded):
 class Makwa:
     # n - modulus, h - hash function, t - post_hashing length, w - work factor
     def __init__(self, n, h=sha256, pre_hashing=True, t=0, w=4096):
@@ -40,7 +40,6 @@ class Makwa:
         self.t = t
         self.h = h
         self.w = w
-        self.salt = b''
 
     # 2.3 The KDF
     # Tested: OK
@@ -81,26 +80,27 @@ class Makwa:
 
     # 2.7 Post-Hashing
     def post_hashing(self, hash):
-        if self.t is not None:
+        if self.t != 0:
             return self.kdf(hash, self.t)
         else:
             return hash
 
     # 2.6 Core Hashing
-    def hash(self, password):
+    # Basic Test: OK
+    def hash(self, password, salt):
         password = self.pre_hashing(password)
         # 1. Let S be the following byte sequence (called the padding):
         # (u = len(password) (in bytes))
         # S = H_(k−2−u)(salt || password || u)
         k = len(encode(self.n))
-        u = len(encode(len(password)))
+        u = len(password)
         # u must be such that u ≤ 255 and u ≤ k − 32
         if u > 255 or u > k - 32:
             raise ValueError('Password is too long')
-        S = self.kdf(self.salt + password + pack('=B', u), k - 2 - u)
+        S = self.kdf(salt + password + pack('=B', u), k - 2 - u)
         # 2. Let X be the following byte sequence:
         # X = 0x00 | | S | | π | | u
-        X = b'0x00' + S + password + pack('=B', u)
+        X = b'\x00' + S + password + pack('=B', u)
         # 3. Let x be the integer obtained by decoding X with OS2IP.
         x = decode(X)
         # 4. Compute:
@@ -114,6 +114,9 @@ class Makwa:
         Y = encode(y, k)
         # The primary output of MAKWA is Y
         return self.post_hashing(Y)
+
+    def check(self, ref, hashed):
+        return ref == hashed
 
 
 # Used only for formatting
@@ -136,12 +139,12 @@ def bytes_to_str(x):
 
 def main():
     ret_x = encode(255, 5)
-    print(ret_x)
-    print(decode(ret_x))
-    print(int('55' '22', 16))
+    # print(ret_x)
+    # print(decode(ret_x))
+    # print(int('55' '22', 16))
     PRIV2048 = int(
-        '55' '41' '4d' '31'
-        '00' '80' 'ea' '43'
+        # '55' '41' '4d' '31' '00' '80' // Magic bytes
+        'ea' '43'
         'd7' '9d' 'f0' 'b8'
         '74' '14' '0a' '55'
         'ec' 'd1' '44' '73'
@@ -207,10 +210,99 @@ def main():
         'ee' '3b' 'fe' 'fe'
         'c4' 'f3' 'f5' 'b3'
         , 16)
+    PUB2048 = int(
+        # '55' '41' '4d' '30' '01' '00' // Magic bytes
+        'c2' '2c'
+        '40' 'bb' 'd0' '56'
+        'bb' '21' '3a' 'ad'
+        '7c' '83' '05' '19'
+        '10' '1a' 'b9' '26'
+        'ae' '18' 'e3' 'e9'
+        'fc' '96' '99' 'c8'
+        '06' 'e0' 'ae' '5c'
+        '25' '94' '14' 'a0'
+        '1a' 'c1' 'd5' '2e'
+        '87' '3e' 'c0' '80'
+        '46' 'a6' '8e' '34'
+        '4c' '8d' '74' 'a5'
+        '08' '95' '28' '42'
+        'ef' '0f' '03' 'f7'
+        '1a' '6e' 'dc' '07'
+        '7f' 'aa' '14' '89'
+        '9a' '79' 'f8' '3c'
+        '3a' 'e1' '36' 'f7'
+        '74' 'fa' '6e' 'b8'
+        '8f' '1d' '1a' 'ea'
+        '5e' 'a0' '2f' 'c0'
+        'cc' 'af' '96' 'e2'
+        'ce' '86' 'f3' '49'
+        '0f' '49' '93' 'b4'
+        'b5' '66' 'c0' '07'
+        '96' '41' '47' '2d'
+        'ef' 'c1' '4b' 'ec'
+        'cf' '48' '98' '4a'
+        '79' '46' 'f1' '44'
+        '1e' 'a1' '44' 'ea'
+        '4c' '80' '2a' '45'
+        '75' '50' 'ba' '3d'
+        'f0' 'f1' '4c' '09'
+        '0a' '75' 'fe' '9e'
+        '6a' '77' 'cf' '0b'
+        'e9' '8b' '71' 'd5'
+        '62' '51' 'a8' '69'
+        '43' 'e7' '19' 'd2'
+        '78' '65' 'a4' '89'
+        '56' '6c' '1d' 'c5'
+        '7f' 'cd' 'ef' 'ac'
+        'a6' 'ab' '04' '3f'
+        '8e' '13' 'f6' 'c0'
+        'be' '7b' '39' 'c9'
+        '2d' 'a8' '6e' '1d'
+        '87' '47' '7a' '18'
+        '9e' '73' 'ce' '8e'
+        '31' '1d' '3d' '51'
+        '36' '1f' '8b' '00'
+        '24' '9f' 'b3' 'd8'
+        '43' '56' '07' 'b1'
+        '4a' '1e' '70' '17'
+        '0f' '9a' 'f3' '67'
+        '84' '11' '0a' '3f'
+        '2e' '67' '42' '8f'
+        'c1' '8f' 'b0' '13'
+        'b3' '0f' 'e6' '78'
+        '2a' 'ec' 'b4' '42'
+        '8d' '7c' '8e' '35'
+        '4a' '0f' 'bd' '06'
+        '1b' '01' '91' '7c'
+        '72' '7a' 'be' 'e0'
+        'fe' '3f' 'd3' 'ce'
+        'f7' '61', 16
+    )
     M256 = Makwa(PRIV2048, sha256, False, 0, 1024)
     M512 = Makwa(PRIV2048, sha512, False, 0, 1024)
-    print(bytes_to_str(M256.kdf(b'\x07', 100)))  # Sample KDF test
+    M256Pub = Makwa(PUB2048, sha256, False, 12, 4096)
+    # Sample KDF test
+    print('\nSample KDF test')
+    print(bytes_to_str(M256.kdf(b'\x07', 100)))
     print(bytes_to_str(M512.kdf(b'\x07', 100)))
+    salt = int(
+        'C7' '27' '03' 'C2'
+        '2A' '96' 'D9' '99'
+        '2F' '3D' 'EA' '87'
+        '64' '97' 'E3' '92', 16
+    )
+    ref = int(
+        'C9' 'CE' 'A0' 'E6'
+        'EF' '09' '39' '3A'
+        'B1' '71' '0A' '08', 16
+    )
+    # Sample password hashing test
+    print('\nSample password hashing test')
+    password = "Gego beshwaji'aaken awe makwa; onzaam naniizaanizi."
+    pwd_bytes = bytes(password, 'UTF-8')
+    print("Salt= "+bytes_to_str(encode(salt)))
+    print("Ref= "+bytes_to_str(encode(ref)))
+    print("Hashed= "+bytes_to_str(M256Pub.hash(pwd_bytes, encode(salt))))
 
 
 if __name__ == '__main__':
