@@ -1,5 +1,5 @@
 from struct import pack
-
+import base64
 
 # 2.4 Integer Encoding
 # I2OSP as well
@@ -40,3 +40,40 @@ def bytes_to_str(x):
     for i in x:
         ret += byte_to_str(i)
     return ret
+
+
+# Base64 encoding without newlines or equality signs
+def base64_custom_en(buf, with_equal):
+    BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+    out = ""
+    length = len(buf)
+    off = 0
+    while True:
+        if length < 3:
+            break
+
+        w = buf[off] & 0xFF
+        off += 1
+        w = (w << 8) + (buf[off] & 0xFF)
+        off += 1
+        w = (w << 8) + (buf[off] & 0xFF)
+        off += 1
+        out += BASE64[w >> 18]
+        out += BASE64[(w >> 12) & 0x3F]
+        out += BASE64[(w >> 6) & 0x3F]
+        out += BASE64[w & 0x3F]
+        length -= 3
+    if length == 1:
+        w1 = buf[off] & 0xFF
+        out += BASE64[w1 >> 2]
+        out += BASE64[(w1 << 4) & 0x3F]
+        if with_equal:
+            out += "=="
+    elif length == 2:
+        w2 = ((buf[off] & 0xFF) << 8) + (buf[off + 1] & 0xFF)
+        out += BASE64[w2 >> 10]
+        out += BASE64[(w2 >> 4) & 0x3F]
+        out += BASE64[(w2 >> 4) & 0x3F]
+        if with_equal:
+            out += "=="
+    return out

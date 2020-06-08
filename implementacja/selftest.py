@@ -1,8 +1,9 @@
 import unittest
 from hashlib import sha256
 
-
-from makwa import Makwa, decode
+from makwakeys import makeMakwaPrivateKey
+from makwa import Makwa
+from encoding import decode
 
 modulus = 0
 privkey = 0
@@ -100,7 +101,7 @@ def check_simple(preHash, postHashLength, workFactor):
 
 def check_delegation(priv, param_type):
     md = deleggen.generate(priv, 4096, param_type)
-    sk = keygen(priv)
+    sk = makeMakwaPrivateKey(priv)
     mod = sk.getModulus()
     md_enc = md.export()
     md = deleggen(md_enc)
@@ -158,7 +159,7 @@ class MyTestCase(unittest.TestCase):
     def main(self):
         global modulus, privkey, pub2048, priv2048, priv2048_gen
         modulus = decode(pub2048)
-        privkey = keygen(priv2048)
+        privkey = makeMakwaPrivateKey(priv2048)
         check(modulus == privkey)
         check(privkey.exportPrivate() == priv2048)
         check(privkey.exportPublic() == pub2048)
