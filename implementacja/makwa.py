@@ -1,8 +1,10 @@
+import base64
 import hmac
 from hashlib import sha256
 from hashlib import sha512
 from struct import pack
-from encoding import decode, encode, bytes_to_str
+
+from encoding import decode, encode, bytes_to_str, base64_custom_en
 from makwakeys import MAGIC_PUBKEY, MAGIC_PUBKEY_WITHGEN, MAGIC_PRIVKEY, MAGIC_PRIVKEY_WITHGEN, getMagic, \
     makeMakwaPrivateKey, decodePublic
 
@@ -84,6 +86,8 @@ class Makwa:
         self.t = t
         self.h = h
         self.w = w
+        self.mod_id = bytes(8)
+        self.kdf(encode(self.n), self.mod_id)
 
     # 2.3 The KDF
     # Tested: OK
@@ -161,6 +165,37 @@ class Makwa:
 
     def check(self, ref, hashed):
         return ref == hashed
+
+    def encode_output(self, salt, pre_hash, post_hash_len, wf, tau):
+        out = ""  # starting string
+        out += base64_custom_en(bytearray(str(self.mod_id), "utf8"), False)
+        out += "_"
+
+        # pre-/post-hashing flag
+        if pre_hash:
+            if post_hash_len > 0:
+                out += "b"  # pre: yes, post: yes
+            else:
+                out += "r"  # pre: yes, post: no
+        else:
+            if post_hash_len > 0:
+                out += "s"  # pre: no, post: yes
+            else:
+                out += "n"  # pre: no, post: no
+        wf_proc = wf
+        j = 0
+        # ensure wf = (2 or 3)*2^j, where j is an integer
+        while wf_proc > 3 and (wf & 1) == 0:
+            wf_proc /= 2
+            j += 1
+            if wf_proc == 2 or wf_proc == 3:
+                out += str(wf_proc)
+                out += str(j)
+        out += '_'
+        out += base64_custom_en(bytearray(str(salt), "utf8"), False)
+        out += "_"
+        out += base64_custom_en(bytearray(str(tau), "utf8"), False)
+
 
 
 def main():
