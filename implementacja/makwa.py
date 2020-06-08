@@ -1,32 +1,8 @@
 import hmac
-from binascii import b2a_base64, a2b_base64, hexlify, unhexlify
 from hashlib import sha256
 from hashlib import sha512
-from struct import pack, unpack
-
-
-# 2.4 Integer Encoding
-# I2OSP as well
-# Tested: OK
-def encode(x, outlen=None):
-    ret_x = b''
-    while x != 0:
-        ret_x = pack('=B', x & 0xff) + ret_x
-        x >>= 8
-    if outlen and len(ret_x) < outlen:
-        ret_x = b'\x00' * (outlen - len(ret_x)) + ret_x
-    return ret_x
-
-
-# To test encoding
-# OS2IP as well
-# Tested: OK
-def decode(ret_x):
-    x = 0
-    k = len(ret_x)
-    for i in range(k):
-        x = x + ret_x[i] * pow(2, 8 * (k - 1 - i))
-    return x
+from struct import pack
+from encoding import decode, encode, bytes_to_str
 
 
 class Makwa:
@@ -119,30 +95,12 @@ class Makwa:
         return ref == hashed
 
 
-# Used only for formatting
-def byte_to_str(i):
-    ret = ''
-    ret = str(hex(i))
-    ret = ret[2:]
-    if len(ret) == 1:
-        ret = '0' + ret
-    return ret
-
-
-# Used only for formatting
-def bytes_to_str(x):
-    ret = ''
-    for i in x:
-        ret += byte_to_str(i)
-    return ret
-
-
 def main():
     ret_x = encode(255, 5)
     # print(ret_x)
     # print(decode(ret_x))
     # print(int('55' '22', 16))
-    PRIV2048 = int(
+    PRIV2048 = bytes.fromhex(
         # '55' '41' '4d' '31' '00' '80' // Magic bytes
         'ea' '43'
         'd7' '9d' 'f0' 'b8'
@@ -209,7 +167,10 @@ def main():
         'a7' '06' 'cd' '67'
         'ee' '3b' 'fe' 'fe'
         'c4' 'f3' 'f5' 'b3'
-        , 16)
+    )
+
+    for byt in PRIV2048[0:4]:
+        print(byt)
     PUB2048 = int(
         # '55' '41' '4d' '30' '01' '00' // Magic bytes
         'c2' '2c'
