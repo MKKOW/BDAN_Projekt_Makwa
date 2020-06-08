@@ -24,8 +24,11 @@ def decode(ret_x):
         x = x + ret_x[i] * pow(2, 8 * (k - 1 - i))
     return x
 
+
 # Used only for formatting
 def byte_to_str(i):
+    if i == b'\x00' or i is None:
+        return '00'
     ret = ''
     ret = str(hex(i))
     ret = ret[2:]

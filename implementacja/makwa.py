@@ -17,6 +17,62 @@ def makeMakwa(encoded, h=sha256, pre_hashing=True, t=0, w=4096):
         n = decodePublic(encoded)
         makwa = Makwa(n, h, pre_hashing, t, w)
     return makwa
+
+
+def square_root_mod(d, p):
+    return pow(d, (p + 1) / 4) % p
+
+
+def chinese_remainder(p, q, iq, yp, yq):
+    h = ((yp - yq) * iq) % p
+    y = yq + (q * h)
+    return y
+
+
+def sqrtExp(p, w):
+    e = (p + 1) >> 2
+    return pow(e, w, p - 1)
+
+
+def unescrow(privateKey, hashed, salt, hashFunction, workFactor):
+    mpriv = makeMakwaPrivateKey(privateKey)
+    y = decode(hashed)
+    p = mpriv.p
+    q = mpriv.q
+    iq = mpriv.invQ
+    ep = sqrtExp(p, workFactor + 1)
+    eq = sqrtExp(q, workFactor + 1)
+    x1p = pow((y % p), ep, p)
+    x1q = pow((y % q), eq, q)
+    x2p = (p - x1p) % p
+    x2q = (q - x1q) % q
+    xc = [0] * 4
+    xc[0] = chinese_remainder(p, q, iq, x1p, x1q)
+    xc[1] = chinese_remainder(p, q, iq, x1p, x2q)
+    xc[2] = chinese_remainder(p, q, iq, x2p, x1q)
+    xc[3] = chinese_remainder(p, q, iq, x2p, x2q)
+    for i in range(4):
+        buf = encode(xc[i], len(encode(mpriv.modulus)))
+        k = len(buf)
+        if buf[0] != 0x00:
+            continue
+        u = buf[k - 1] & 0xFF
+        if u > (k - 32):
+            continue
+        tmp = salt + buf[k-1-u:k]
+        S = Makwa(mpriv.modulus, hashFunction, False, 0, workFactor).kdf(tmp, k - u - 2)
+        pi = buf[k - 1 - u:k - 1]
+        flag = False
+        for j in range(len(S)):
+            if S[j] != buf[j + 1]:
+                flag = True
+                break
+        if flag:
+            continue
+        pi = buf[k - 1 - u:k - 1]
+        return pi
+
+
 class Makwa:
     # n - modulus, h - hash function, t - post_hashing length, w - work factor
     def __init__(self, n, h=sha256, pre_hashing=True, t=0, w=4096):
@@ -92,7 +148,7 @@ class Makwa:
         # 3. Let x be the integer obtained by decoding X with OS2IP.
         x = decode(X)
         # 4. Compute:
-        # y = x^(2w+1) (mod n)
+        # y = x^(2^(w+1)) (mod n)
         # This computation is normally performed by repeatedly squaring x modulo n; this is
         # done w + 1 times.
         y = x
@@ -251,30 +307,41 @@ def main():
     )
     M256 = makeMakwa(PRIV2048, sha256, False, 0, 1024)
     M512 = makeMakwa(PRIV2048, sha512, False, 0, 1024)
-    M256Pub = makeMakwa(PUB2048, sha256, False, 12, 4096)
+    M256Pub = makeMakwa(PUB2048, sha256, False, 0, 4096)
     # Sample KDF test
     print('\nSample KDF test')
     print(bytes_to_str(M256.kdf(b'\x07', 100)))
     print(bytes_to_str(M512.kdf(b'\x07', 100)))
 
     # Sample password hashing test
-    salt = int(
+    salt = bytes.fromhex(
         'C7' '27' '03' 'C2'
         '2A' '96' 'D9' '99'
         '2F' '3D' 'EA' '87'
-        '64' '97' 'E3' '92', 16
+        '64' '97' 'E3' '92'
     )
-    ref = int(
+    ref = bytes.fromhex(
         'C9' 'CE' 'A0' 'E6'
         'EF' '09' '39' '3A'
-        'B1' '71' '0A' '08', 16
+        'B1' '71' '0A' '08'
     )
+    salt0 = bytes.fromhex(
+        'b8' '2c' 'b4' '2e'
+        '3a' '2d' 'fc' '2a'
+        'd6' '0b' '8b' '76'
+        'c6' '66' 'b0' '15'
+    )
+    print(encode(2, 50))
     print('\nSample password hashing test')
     password = "Gego beshwaji'aaken awe makwa; onzaam naniizaanizi."
     pwd_bytes = bytes(password, 'UTF-8')
-    print("Salt= "+bytes_to_str(encode(salt)))
-    print("Ref= "+bytes_to_str(encode(ref)))
-    print("Hashed= "+bytes_to_str(M256Pub.hash(pwd_bytes, encode(salt))))
+    hashed = M256Pub.hash(pwd_bytes, salt)
+    print("Salt= " + bytes_to_str(salt))
+    print("Ref= " + bytes_to_str(ref))
+    print("Hashed= " + bytes_to_str(hashed))
+    print(decodePublic(PUB2048) == makeMakwaPrivateKey(PRIV2048).modulus)
+    hashed2 = makeMakwa(PRIV2048, sha256, False, 0, 4096).hash(pwd_bytes, salt0)
+    print(unescrow(PRIV2048, hashed2, salt0, sha256, 4096))
 
 
 if __name__ == '__main__':

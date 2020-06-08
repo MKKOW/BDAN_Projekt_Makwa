@@ -42,19 +42,19 @@ def makeMakwaPrivateKey(encoded):
             raise ValueError('Trailing garbage')
     else:
         raise ValueError('Not a Makwa private key')
-    Mak = MakwaPrivateKey(p,q, qgen)
+    Mak = MakwaPrivateKey(p, q, qgen)
     return Mak
 
 
 def encodePublic(modulus, QRGen = None):
     modulus_e = encode(modulus)
-    modulus_e_len = encode(len(modulus_e))
+    modulus_e_len = encode(len(modulus_e), 2)
     qrgen_e = None
     qrgen_e_len = None
     header = encode(MAGIC_PUBKEY)
     if QRGen is not None:
         qrgen_e = encode(QRGen)
-        qrgen_e_len = encode(len(qrgen_e))
+        qrgen_e_len = encode(len(qrgen_e), 2)
         header = encode(MAGIC_PUBKEY_WITHGEN)
     ret = header + modulus_e_len + modulus_e
     if QRGen is not None:
@@ -89,6 +89,24 @@ def decodePublic(encoded):
     return modulus
 
 
+def encodePrivate(p, q, QRGen = None):
+    p_e = encode(p)
+    q_e = encode(q)
+    p_e_len = encode(len(p_e), 2)
+    q_e_len = encode(len(q_e), 2)
+    qrgen_e = None
+    qrgen_e_len = None
+    header = encode(MAGIC_PRIVKEY)
+    if QRGen is not None:
+        qrgen_e = encode(QRGen)
+        qrgen_e_len = encode(len(qrgen_e), 2)
+        header = encode(MAGIC_PRIVKEY_WITHGEN)
+    ret = header + p_e_len + p_e + q_e_len + q_e
+    if QRGen is not None:
+        ret += qrgen_e_len + qrgen_e
+    return ret
+
+
 class MakwaPrivateKey:
     def __init__(self, p, q, gen=None):
         if p<0 or q <0 or p & 3 != 3 or q & 3 != 3 or p == q:
@@ -105,6 +123,9 @@ class MakwaPrivateKey:
 
     def exportPublic(self):
         return encodePublic(self.modulus, self.QRGen)
+
+    def exportPrivate(self):
+        return encodePrivate(self.p, self.q, self.QRGen)
 
 
 def main():
@@ -180,6 +201,7 @@ def main():
     mpriv = makeMakwaPrivateKey(PRIV2048)
     print(bytes_to_str(encode(mpriv.modulus)))
     print(bytes_to_str(encode(decodePublic(mpriv.exportPublic()))))
+    print(bytes_to_str(mpriv.exportPrivate()))
 
 
 if __name__ == '__main__':
