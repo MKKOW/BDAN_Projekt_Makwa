@@ -3,8 +3,20 @@ from hashlib import sha256
 from hashlib import sha512
 from struct import pack
 from encoding import decode, encode, bytes_to_str
+from makwakeys import MAGIC_PUBKEY, MAGIC_PUBKEY_WITHGEN, MAGIC_PRIVKEY, MAGIC_PRIVKEY_WITHGEN, getMagic, \
+    makeMakwaPrivateKey, decodePublic
 
 
+def makeMakwa(encoded, h=sha256, pre_hashing=True, t=0, w=4096):
+    magic = getMagic(encoded)
+    makwa = None
+    if magic == MAGIC_PRIVKEY or magic == MAGIC_PRIVKEY_WITHGEN:
+        mpriv = makeMakwaPrivateKey(encoded)
+        makwa = Makwa(mpriv.modulus, h, pre_hashing, t, w)
+    elif magic == MAGIC_PUBKEY or magic == MAGIC_PUBKEY_WITHGEN:
+        n = decodePublic(encoded)
+        makwa = Makwa(n, h, pre_hashing, t, w)
+    return makwa
 class Makwa:
     # n - modulus, h - hash function, t - post_hashing length, w - work factor
     def __init__(self, n, h=sha256, pre_hashing=True, t=0, w=4096):
@@ -101,7 +113,7 @@ def main():
     # print(decode(ret_x))
     # print(int('55' '22', 16))
     PRIV2048 = bytes.fromhex(
-        # '55' '41' '4d' '31' '00' '80' // Magic bytes
+        '55' '41' '4d' '31' '00' '80'
         'ea' '43'
         'd7' '9d' 'f0' 'b8'
         '74' '14' '0a' '55'
@@ -169,10 +181,8 @@ def main():
         'c4' 'f3' 'f5' 'b3'
     )
 
-    for byt in PRIV2048[0:4]:
-        print(byt)
-    PUB2048 = int(
-        # '55' '41' '4d' '30' '01' '00' // Magic bytes
+    PUB2048 = bytes.fromhex(
+        '55' '41' '4d' '30' '01' '00'
         'c2' '2c'
         '40' 'bb' 'd0' '56'
         'bb' '21' '3a' 'ad'
@@ -237,11 +247,11 @@ def main():
         '1b' '01' '91' '7c'
         '72' '7a' 'be' 'e0'
         'fe' '3f' 'd3' 'ce'
-        'f7' '61', 16
+        'f7' '61'
     )
-    M256 = Makwa(PRIV2048, sha256, False, 0, 1024)
-    M512 = Makwa(PRIV2048, sha512, False, 0, 1024)
-    M256Pub = Makwa(PUB2048, sha256, False, 12, 4096)
+    M256 = makeMakwa(PRIV2048, sha256, False, 0, 1024)
+    M512 = makeMakwa(PRIV2048, sha512, False, 0, 1024)
+    M256Pub = makeMakwa(PUB2048, sha256, False, 12, 4096)
     # Sample KDF test
     print('\nSample KDF test')
     print(bytes_to_str(M256.kdf(b'\x07', 100)))

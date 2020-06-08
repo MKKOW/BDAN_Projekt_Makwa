@@ -1,5 +1,6 @@
 from struct import pack
 
+
 # 2.4 Integer Encoding
 # I2OSP as well
 # Tested: OK

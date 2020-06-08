@@ -6,9 +6,15 @@ MAGIC_PRIVKEY_WITHGEN = 0x55414D71
 MAGIC_PUBKEY = 0x55414D30
 MAGIC_PUBKEY_WITHGEN = 0x55414D70
 
-def makeMakwaPrivateKey(encoded):
+
+def getMagic(encoded):
     hexs = (hexlify(encoded[0:4]))
     magic = int(hexs, 16)
+    return magic
+
+
+def makeMakwaPrivateKey(encoded):
+    magic = getMagic(encoded)
     withgen = False
     qgenlen = 0
     readlen = 0
@@ -57,8 +63,7 @@ def encodePublic(modulus, QRGen = None):
 
 
 def decodePublic(encoded):
-    hexs = (hexlify(encoded[0:4]))
-    magic = int(hexs, 16)
+    magic = getMagic(encoded)
     modulus_len = None
     modulus = None
     withgen = False
