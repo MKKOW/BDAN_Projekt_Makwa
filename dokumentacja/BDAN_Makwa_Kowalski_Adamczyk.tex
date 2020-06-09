@@ -78,7 +78,7 @@ Zaimplementowaliśmy również podstawowe komunikaty błędów w przypadku podan
 W części funkcji bazowaliśmy głownie na opisie zawartym w specyfikacji, a w innych opieraliśmy się na udostępnionej nam implementacji Makwy w języku Java
 \section{Implementacja podstawowych funkcji}
 \subsection{Konstrukcja klasy Makwa}
-Klasa \textit{Makwa} posiada następujące pola:
+Pola klasy \textit{Makwa}:
 \begin{itemize}
 	\item n - liczba całkowita, główny parametr uzywany do haszowania hasła (\textit{modulus}) (musi zostac podany)
 	\item h - funkcja haszująca używana w danej instancji klasy, nasza implementacja umożliwia wykorzystanie tylko SHA256 lub SHA512. (domyślnie SHA256)
@@ -98,6 +98,26 @@ Metody klasy Makwa:
 	Zwrócony napis ma format: \textit{base64(mod\_id)\_xddd\_base64(salt)\_base64(tau)}Gdzie \textit{x} to odpowiedni (określony w specyfkacji) znak definiujący ustawienia Pre- i Post- Hashing, \textit{abc} to liczby określające wartość work factor ($wf=a\cdot 2^{10b + c}$). Zapis \textit{base64(x)} wskazuje zapis napisu (liczby zapisanej heksadecymalnie) jako w formacie o podstawie 64.
 \end{itemize}
 \subsection{Konstrukcja klasy MakwaPrivateKey}
+Pola klasy \textit{MakwaPrivateKey}:
+\begin{itemize}
+	\item p, q - liczby całkowite z których jest obliczane n (modulus)
+	\item QRGen - generator residuów kwadratowych (nie wykorzystywany przez nas w żadnej z funkcji)
+	\item modulus (n) - $n=p\cdot q$
+\end{itemize}
+Metody klasy MakwaPrivateKey
+\begin{itemize}
+	\item exportPublic(self) - eksportuje klucz publiczny.
+	\item exportPrivate(self) - eksportuje klucz prywatny.
+\end{itemize}
+Oprócz tego w pliku \textit{makwakeys.py} zaimplementowaliśmy funkcje:
+\begin{itemize}
+	\item encodePrivate(p, q, QRGen) - tworzy klucz prywatny na podstawie zadanych parametrów.
+	\item encodePublic(modulus, QRGen) - tworzy klucz publiczny na podstawie zadanych parametrów.
+	\item decodePublic(encoded) - wydobywa z klucza publicznego wartość liczby n (modulus)
+	\item makeMakwaPrivateKey(encoded) - tworzy instancje klasy MakwaPrivateKey z zadanego klucza prywatnego
+	\item generatePrivateKey(size) - generuje obiekt klasy MakwaPrivateKey stworzony z losowego klucza prywatnego o długości \textit{size} bitów
+\end{itemize}
+Pozostałe funkcje znajdujące się w pliku są funkcja pomocniczymi stworzonymi dla ułatwienia korzystania z funkcji wyżej wymienionych.
 \subsection{KDF}
 KDF (\textit{Key-Derivation Function}) została zaimplementowana bardzo dokładnie odwzorowując kroki przedstawione w specyfikacji.
 \begin{lstlisting}[language=Python]
@@ -121,7 +141,8 @@ def kdf(self, m, s):
 	V = hmac.new(K, msg=V, digestmod=self.h).digest()
 	# 7. Set T to an empty sequence.
 	T = b''
-	# 8. While the length of T is not at least equal to s (the requested output length), do the
+	# 8. While the length of T is not at least equal to s
+	# (the requested output length), do the
 	# following: V <- HMAC_K(V), T <- T||V
 	while len(T) < s:
 		V = hmac.new(K, msg=V, digestmod=self.h).digest()
@@ -157,66 +178,225 @@ def decode(ret_x):
 		x = x + ret_x[i] * pow(2, 8 * (k - 1 - i))
 	return x
 \end{lstlisting}
-Funkcje wykorzystywane do formatowania, konieczne do poprawy czytelności wyników:
-\begin{lstlisting}[language=Python]
-# Used only for formatting
-def byte_to_str(i):
-	if i == b'\x00' or i is None:
-		return '00'
-	ret = ''
-	ret = str(hex(i))
-	ret = ret[2:]
-	if len(ret) == 1:
-		ret = '0' + ret
-	return ret
-
-
-# Used only for formatting
-def bytes_to_str(x):
-	ret = ''
-	for i in x:
-		ret += byte_to_str(i)
-	return ret
-\end{lstlisting}
-Funkcja kodująca liczbę zapisaną w systemie heksadecymalnym jako liczbę zapisaną w systemie o podstawie 64
-\begin{lstlisting}[language=Python]
-# Base64 encoding without newlines or equality signs
-def base64_custom_en(buf, with_equal):
-	BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
-	out = ""
-	length = len(buf)
-	off = 0
-	while length >= 3:
-		w = buf[off] & 0xFF
-		off += 1
-		w = (w << 8) + (buf[off] & 0xFF)
-		off += 1
-		w = (w << 8) + (buf[off] & 0xFF)
-		off += 1
-		out += BASE64[w >> 18]
-		out += BASE64[(w >> 12) & 0x3F]
-		out += BASE64[(w >> 6) & 0x3F]
-		out += BASE64[w & 0x3F]
-		length -= 3
-	if length == 1:
-		w1 = buf[off] & 0xFF
-		out += BASE64[w1 >> 2]
-		out += BASE64[(w1 << 4) & 0x3F]
-	if with_equal:
-		out += "=="
-	elif length == 2:
-		w2 = ((buf[off] & 0xFF) << 8) + (buf[off + 1] & 0xFF)
-		out += BASE64[w2 >> 10]
-		out += BASE64[(w2 >> 4) & 0x3F]
-		out += BASE64[(w2 << 2) & 0x3F]
-		if with_equal:
-			out += "=="
-return out
-\end{lstlisting}
-\subsection{Input Pre-Hashing}
+Implementacja obu funkcji opiera się wprost na opisie w sekcji \textit{2.4 Integer Encoding} ze specyfikacji.
 \subsection{Core Hashing}
-\subsection{Post-Hashing}
+Główna funkcja haszująca, podobnie jak implementacja \textit{KDF} opierała się na wprost na opisie w specyfikacji.
+\begin{lstlisting}[language=Python]
+# 2.6 Core Hashing
+# Basic Test: OK
+def hash(self, password, salt):
+	password = self.pre_hashing(password)
+	# 1. Let S be the following byte sequence (called the padding):
+	# (u = len(password) (in bytes))
+	# S = H_(k−2−u)(salt || password || u)
+	k = len(encode(self.n))
+	u = len(password)
+	# u must be such that u ≤ 255 and u ≤ k − 32
+	if u > 255 or u > k - 32:
+		raise ValueError('Password is too long')
+	S = self.kdf(salt + password + pack('=B', u), k - 2 - u)
+	# 2. Let X be the following byte sequence:
+	# X = 0x00 | | S | | π | | u
+	X = b'\x00' + S + password + pack('=B', u)
+	# 3. Let x be the integer obtained by decoding X with OS2IP.
+	x = decode(X)
+	# 4. Compute:
+	# y = x^(2^(w+1)) (mod n)
+	# This computation is normally performed by repeatedly squaring x modulo n;
+	# this is done w + 1 times.
+	y = x
+	for _ in range(self.w + 1):
+		y = pow(y, 2, self.n)
+	# 5. Encode y with I2OSP into the byte sequence Y of length k bytes.
+	Y = encode(y, k)
+	# The primary output of MAKWA is Y
+	return self.post_hashing(Y)
+\end{lstlisting}
 \section{Implementacja zaawansowanych funkcji}
 \subsection{Unescrow}
+Użycie funkcji \textit{unescrow} w celu odzyskania hasła (porcji danych) z hasza możliwe jest tylko w przypadku nie użycia w czasie haszowania procesów pre\_hashingu i post\_hashingu oraz dostępu klucza prywatnego (wartości $p$ i $q$) użytego do obliczenia haszu.
+
+Podczas przeprowadzenia tego procesu konieczne jest wykorzystanie Chińskiego Twierdzenia o Resztach.
+
+Poniżej nasza implementacja wraz z funkcjami pomocniczymi. Implementacja w dużej mierze oparta na implementacji tej funkcji w języku Java
+\begin{lstlisting}[language=Python]
+def square_root_mod(d, p):
+	return pow(d, (p + 1) / 4) % p
+
+
+def chinese_remainder(p, q, iq, yp, yq):
+	h = ((yp - yq) * iq) % p
+	y = yq + (q * h)
+	return y
+
+
+def sqrtExp(p, w):
+	e = (p + 1) >> 2
+	return pow(e, w, p - 1)
+	
+	
+def unescrow(privateKey, hashed, salt, hashFunction, workFactor):
+	mpriv = makeMakwaPrivateKey(privateKey)
+	y = decode(hashed)
+	p = mpriv.p
+	q = mpriv.q
+	iq = mpriv.invQ
+	ep = sqrtExp(p, workFactor + 1)
+	eq = sqrtExp(q, workFactor + 1)
+	x1p = pow((y % p), ep, p)
+	x1q = pow((y % q), eq, q)
+	x2p = (p - x1p) % p
+	x2q = (q - x1q) % q
+	xc = [0] * 4
+	xc[0] = chinese_remainder(p, q, iq, x1p, x1q)
+	xc[1] = chinese_remainder(p, q, iq, x1p, x2q)
+	xc[2] = chinese_remainder(p, q, iq, x2p, x1q)
+	xc[3] = chinese_remainder(p, q, iq, x2p, x2q)
+	for i in range(4):
+		buf = encode(xc[i], len(encode(mpriv.modulus)))
+		k = len(buf)
+		if buf[0] != 0x00:
+			continue
+		u = buf[k - 1] & 0xFF
+		if u > (k - 32):
+			continue
+		tmp = salt + buf[k-1-u:k]
+		S = Makwa(mpriv.modulus, hashFunction, False, 0, workFactor).kdf(tmp, /
+		 k - u - 2)
+		pi = buf[k - 1 - u:k - 1]
+		flag = False
+		for j in range(len(S)):
+			if S[j] != buf[j + 1]:
+				flag = True
+				break
+		if flag:
+			continue
+		pi = buf[k - 1 - u:k - 1]
+		return pi
+\end{lstlisting}
 \subsection{Generacja klucza prywatnego}
+Wzorując się na implementacji algorytmu w języku Java  zaimplementowaliśmy również generacje klucza prywatnego określone długości.
+
+Implementacja ta korzysta z testu Millera-Rabina. Funkcja \textit{computeNumMR} zwraca liczbę rekomendowanej liczby rund koniecznych do przeprowadzenia testu Millera-Rabina zaimplementowanego w funkcji \textit{passesMR}
+
+Funkcja generująca klucz prywatny:
+\begin{lstlisting}[language=Python]
+def generatePrivateKey(size):
+	if size < 1273 or size > 32768:
+		raise ValueError('Invalid modulus size: '+str(size))
+	k = (size - 14) // 4
+	x = 0
+	case = (size-14) & 3
+	if case == 0:
+		x = 7
+	elif case == 1:
+		x = 8
+	elif case == 2:
+		x = 10
+	else:
+		x = 12
+	sp = []
+	used = []
+	bp = []
+	length = (k+12) >> 3
+	mz16 = 0xFFFF >> (8 * length - k)
+	mo16 = x << (k + 16 - 8 * length)
+	numMR = computeNumMR(k)
+	numMR2 = computeNumMR(k << 1)
+	flag = True
+	while flag:
+		buf = os.urandom(length)
+		buf = encode(buf[0] & (mz16 >> 8), 1) + buf[1:]
+		buf = encode(buf[0], 1) + encode(buf[1] & mz16,1) + buf[2:]
+		buf = encode(buf[0] | (mo16 >> 8), 1) + buf[1:]
+		buf = encode(buf[0], 1) + encode(buf[1] | mo16,1) + buf[2:]
+		buf = buf[:(length-1)] + encode(buf[length - 1] | 0x01)
+		pj = decode(buf)
+		if isMultipleSmallPrime(pj):
+			continue
+		if not passesMR(pj, numMR):
+			continue
+		flag1=False
+		flag2=False
+		for z in sp:
+			if z == pj:
+			flag1 = True
+			break
+		if flag1:
+			continue
+		for i in range(len(sp)-1,-1,-1):
+			if used[i]:
+				continue
+			pi = sp[i]
+			p = ((pi * pj) << 1) + 1
+			if not passesMR(p,numMR2):
+				continue
+			if pow(4, pi, p) == 1:
+				continue
+			if pow(4, pj, p) == 1:
+				continue
+			bp.append(p)
+			if len(bp) == 2:
+				flag = False
+				break
+			sp.append(pj)
+			used.append(True)
+			used[i] = True
+			flag2 = True
+			break
+		if not flag:
+			break
+		if flag2:
+			continue
+		sp.append(pj)
+		used.append(False)
+	p = bp[0]
+	q = bp[1]
+	if p < q:
+		t = p
+		p = q
+		q = t
+	mk = MakwaPrivateKey(p, q, 4)
+	if mk.modulus.bit_length() != size:
+		raise ValueError('Key generation error')
+	return mk
+\end{lstlisting}
+Funkcja \textit{passesMR}:
+\begin{lstlisting}[language=Python]
+def passesMR(n,cc):
+	if n<0:
+		n = -n
+	if n == 0:
+		return True
+	if n.bit_length() <= 3:
+		if n == 2 or n == 3 or n == 5 or n ==7:
+			return False
+		else:
+			return True
+	if (n & (1 << 0)) == 0: # checkout BigInteger.testBit in java
+		return True
+
+	# Miller-Rabin algorithm
+	nm1 = n - 1
+	nm2 = nm1 - 1
+	r = nm1
+	s = 0
+	while (r & (1 << 0)) == 0:
+		s+=1
+		r = r >> 1
+	while cc > 0:
+		cc-=1
+		a = makeRandNonZero(nm2) + 1
+		y = pow(a,r,n)
+		if y!=1 and y!=nm1:
+			for j in range(1,s):
+				if y == nm1:
+					break
+				y = (y * y) % n
+				if y == 1:
+					return False
+			if y!=nm1:
+				return False
+	return True
+\end{lstlisting}
 \end{document}

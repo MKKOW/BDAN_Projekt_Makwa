@@ -107,7 +107,7 @@ def passesMR(n,cc):
     return True
 
 
-def generatePrvateKey(size):
+def generatePrivateKey(size):
     if size < 1273 or size > 32768:
         raise ValueError('Invalid modulus size: '+str(size))
     k = (size - 14) // 4
@@ -377,7 +377,7 @@ def main():
     print('Modulus from exported public: '+bytes_to_str(encode(decodePublic(mpriv.exportPublic()))))
     print('Exported public: '+bytes_to_str(mpriv.exportPublic()))
     print('Exported priv: '+bytes_to_str(mpriv.exportPrivate()))
-    mpriv_gen = generatePrvateKey(2048)
+    mpriv_gen = generatePrivateKey(2048)
     print('Generated private: '+bytes_to_str(mpriv_gen.exportPrivate()))
 
 
