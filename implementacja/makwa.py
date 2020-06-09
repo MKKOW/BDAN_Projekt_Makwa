@@ -188,7 +188,11 @@ class Makwa:
             j += 1
             if wf_proc == 2 or wf_proc == 3:
                 out += str(wf_proc)
-                out += str(j)
+                if j < 10:
+                    j = '0'+str(j)
+                    out += j
+                else:
+                    out += str(j)
         out += '_'
         out += base64_custom_en(salt, False)
         out += "_"

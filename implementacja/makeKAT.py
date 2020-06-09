@@ -52,8 +52,8 @@ wf_large = 4096
 def printKDF(banner, hashFunction, input, outlen):
     output = Makwa(makeMakwaPrivateKey(priv2048).modulus, hashFunction).kdf(input, outlen)
     print(banner)
-    print("input: "+bytes_to_str(input))
-    print("output: "+bytes_to_str(output))
+    print("input: " + bytes_to_str(input))
+    print("output: " + bytes_to_str(output))
     print('')
     h.update(output)
 
@@ -95,8 +95,8 @@ def printKAT(banner, mpub, mpriv, input, salt, pre_hash, post_hash_len):
     check(equals(h3, h4))
     out_lg_str = mpub.encode_output(salt, pre_hash, post_hash_len, wf_large, h3)
     print(banner)
-    print("input: "+bytes_to_str(input))
-    print("salt: "+bytes_to_str(salt))
+    print("input: " + bytes_to_str(input))
+    print("salt: " + bytes_to_str(salt))
     if pre_hash:
         print("pre-hashing: true")
     else:
@@ -104,29 +104,28 @@ def printKAT(banner, mpub, mpriv, input, salt, pre_hash, post_hash_len):
     if post_hash_len == 0:
         print("post-hashing: false")
     else:
-        print("post-hashing: ", post_hash_len)
-    print("bin"+str(wf_small)+": "+bytes_to_str(h1))
-    print("bin"+str(wf_large)+": "+bytes_to_str(h3))
-    print("str"+str(wf_small) + ": " + out_sm_str)
-    print("str"+str(wf_large) + ": " + out_lg_str)
+        print("post-hashing: " + str(post_hash_len))
+    print("bin" + str(wf_small) + ": " + bytes_to_str(h1))
+    print("bin" + str(wf_large) + ": " + bytes_to_str(h3))
+    print("str" + str(wf_small) + ": " + out_sm_str)
+    print("str" + str(wf_large) + ": " + out_lg_str)
     print('')
     h.update(h1)
     h.update(h3)
     h.update(bytes(out_sm_str, "UTF-8"))
     h.update(bytes(out_lg_str, "UTF-8"))
     if (not pre_hash) and post_hash_len == 0:
-        upi1 = unescrow(priv2048, h1,salt,mpriv.h,wf_small)
+        upi1 = unescrow(priv2048, h1, salt, mpriv.h, wf_small)
         check(equals(upi1, input))
         upi2 = unescrow(priv2048, h1, salt, mpriv.h, wf_small)
         check(equals(upi2, input))
 
+
 def println(name, value):
     print(name, ": ")
-    for i in range (len(value)):
+    for i in range(len(value)):
         print("%02x", value[i] & 0xFF)
     print('\n')
-
-
 
 
 class makeKAT:
@@ -144,7 +143,7 @@ class makeKAT:
         for i in range(200):
             input = bytearray(i)
             for j in range(i):
-                input[j] = ( 7 * i + 83 * j ) % 256
+                input[j] = (7 * i + 83 * j) % 256
             printKDF("KDF/SHA-256", sha256, input, 100)
             printKDF("KDF/SHA-512", sha512, input, 100)
 

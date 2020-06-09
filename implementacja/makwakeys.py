@@ -1,17 +1,191 @@
+import os
+import random
 from binascii import hexlify
-from encoding import encode, bytes_to_str
+from encoding import encode, bytes_to_str, decode
 from modInverse import modInverse
 MAGIC_PRIVKEY = 0x55414D31
 MAGIC_PRIVKEY_WITHGEN = 0x55414D71
 MAGIC_PUBKEY = 0x55414D30
 MAGIC_PUBKEY_WITHGEN = 0x55414D70
-
+PSP = 307444891294245705
 
 def getMagic(encoded):
     hexs = (hexlify(encoded[0:4]))
     magic = int(hexs, 16)
     return magic
 
+def computeNumMR(k):
+    if k < 400:
+        if k<250:
+            if k<100:
+                return 40
+            elif k <150:
+                return 27
+            elif k <200:
+                return 18
+            else:
+                return 15
+        else:
+            if k < 300:
+                return 12
+            elif k < 350:
+                return 9
+            else:
+                return 8
+    else:
+        if k<650:
+            if k<450:
+                return 7
+            elif k <550:
+                return 6
+            else:
+                return 5
+        else:
+            if k < 850:
+                return 4
+            elif k < 1300:
+                return 3
+            else:
+                return 2
+
+
+def isMultipleSmallPrime(x):
+    if x < 0:
+        x = -x
+    if x == 0:
+        return True
+    if (x & (1 << 0)) == 0: # checkout BigInteger.testBit in java
+        return True
+    a = PSP
+    b = x % PSP
+    while b != 0:
+        t = a % b
+        a = b
+        b = t
+    return a != 1
+
+def makeRandNonZero(m):
+    if m <= 1:
+        raise ValueError('Invalid modulus (less than 2)')
+    z = random.randrange(1,m)
+    return z
+
+def passesMR(n,cc):
+    if n<0:
+        n = -n
+    if n == 0:
+        return True
+    if n.bit_length() <= 3:
+        if n == 2 or n == 3 or n == 5 or n ==7:
+            return False
+        else:
+            return True
+    if (n & (1 << 0)) == 0: # checkout BigInteger.testBit in java
+        return True
+
+    # Miller-Rabin algorithm
+    nm1 = n - 1
+    nm2 = nm1 - 1
+    r = nm1
+    s = 0
+    while (r & (1 << 0)) == 0:
+        s+=1
+        r = r >> 1
+    while cc > 0:
+        cc-=1
+        a = makeRandNonZero(nm2) + 1
+        y = pow(a,r,n)
+        if y!=1 and y!=nm1:
+            for j in range(1,s):
+                if y == nm1:
+                    break
+                y = (y * y) % n
+                if y == 1:
+                    return False
+            if y!=nm1:
+                return False
+    return True
+
+
+def generatePrvateKey(size):
+    if size < 1273 or size > 32768:
+        raise ValueError('Invalid modulus size: '+str(size))
+    k = (size - 14) // 4
+    x = 0
+    case = (size-14) & 3
+    if case == 0:
+        x = 7
+    elif case == 1:
+        x = 8
+    elif case == 2:
+        x = 10
+    else:
+        x = 12
+    sp = []
+    used = []
+    bp = []
+    length = (k+12) >> 3
+    mz16 = 0xFFFF >> (8 * length - k)
+    mo16 = x << (k + 16 - 8 * length)
+    numMR = computeNumMR(k)
+    numMR2 = computeNumMR(k << 1)
+    flag = True
+    while flag:
+        buf = os.urandom(length)
+        buf = encode(buf[0] & (mz16 >> 8), 1) + buf[1:]
+        buf = encode(buf[0], 1) + encode(buf[1] & mz16,1) + buf[2:]
+        buf = encode(buf[0] | (mo16 >> 8), 1) + buf[1:]
+        buf = encode(buf[0], 1) + encode(buf[1] | mo16,1) + buf[2:]
+        buf = buf[:(length-1)] + encode(buf[length - 1] | 0x01)
+        pj = decode(buf)
+        if isMultipleSmallPrime(pj):
+            continue
+        if not passesMR(pj, numMR):
+            continue
+        flag1=False
+        flag2=False
+        for z in sp:
+            if z == pj:
+                flag1 = True
+                break
+        if flag1:
+            continue
+        for i in range(len(sp)-1,-1,-1):
+            if used[i]:
+                continue
+            pi = sp[i]
+            p = ((pi * pj) << 1) + 1
+            if not passesMR(p,numMR2):
+                continue
+            if pow(4, pi, p) == 1:
+                continue
+            if pow(4, pj, p) == 1:
+                continue
+            bp.append(p)
+            if len(bp) == 2:
+                flag = False
+                break
+            sp.append(pj)
+            used.append(True)
+            used[i] = True
+            flag2 = True
+            break
+        if not flag:
+            break
+        if flag2:
+            continue
+        sp.append(pj)
+        used.append(False)
+    p = bp[0]
+    q = bp[1]
+    if p < q:
+        t = p
+        p = q
+        q = t
+    mk = MakwaPrivateKey(p, q, 4)
+    if mk.modulus.bit_length() != size:
+        raise ValueError('Key generation error')
+    return mk
 
 def makeMakwaPrivateKey(encoded):
     magic = getMagic(encoded)
@@ -197,11 +371,14 @@ def main():
         'ee' '3b' 'fe' 'fe'
         'c4' 'f3' 'f5' 'b3'
     )
-    print(modInverse(7, 20))
+    print('MoInverse(7,20): '+str(modInverse(7, 20)))
     mpriv = makeMakwaPrivateKey(PRIV2048)
-    print(bytes_to_str(encode(mpriv.modulus)))
-    print(bytes_to_str(encode(decodePublic(mpriv.exportPublic()))))
-    print(bytes_to_str(mpriv.exportPrivate()))
+    print('Modulus from priv: '+bytes_to_str(encode(mpriv.modulus)))
+    print('Modulus from exported public: '+bytes_to_str(encode(decodePublic(mpriv.exportPublic()))))
+    print('Exported public: '+bytes_to_str(mpriv.exportPublic()))
+    print('Exported priv: '+bytes_to_str(mpriv.exportPrivate()))
+    mpriv_gen = generatePrvateKey(2048)
+    print('Generated private: '+bytes_to_str(mpriv_gen.exportPrivate()))
 
 
 if __name__ == '__main__':
