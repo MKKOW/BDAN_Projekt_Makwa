@@ -78,7 +78,7 @@ def check(b):
     if not b:
         print("Self-test failed")
 
-def speed_test():
+# def speed_test():
 
 
 

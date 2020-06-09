@@ -51,10 +51,7 @@ def base64_custom_en(buf, with_equal):
     out = ""
     length = len(buf)
     off = 0
-    while True:
-        if length < 3:
-            break
-
+    while length >= 3:
         w = buf[off] & 0xFF
         off += 1
         w = (w << 8) + (buf[off] & 0xFF)
@@ -76,7 +73,7 @@ def base64_custom_en(buf, with_equal):
         w2 = ((buf[off] & 0xFF) << 8) + (buf[off + 1] & 0xFF)
         out += BASE64[w2 >> 10]
         out += BASE64[(w2 >> 4) & 0x3F]
-        out += BASE64[(w2 >> 4) & 0x3F]
+        out += BASE64[(w2 << 2) & 0x3F]
         if with_equal:
             out += "=="
     return out

@@ -1,7 +1,8 @@
+import sys
 from hashlib import sha256, sha512
 
 from makwakeys import decodePublic, makeMakwaPrivateKey
-from makwa import Makwa
+from makwa import Makwa, unescrow
 from selftest import check, equals
 from encoding import bytes_to_str, encode
 
@@ -29,6 +30,7 @@ priv2048 = bytes.fromhex(
     'EE3BFEFEC4F3F5B3'
 )
 salts = [bytearray.fromhex('b82cb42e3a2dfc2ad60b8b76c666b015'),
+         bytearray.fromhex('a867f036cc9743415a7cf8e76f3d79c3'),
          bytearray.fromhex('079609036dd1894ce37d08ab2021a302'),
          bytearray.fromhex('1adbc1e6a9dd481fff00eb93b28e9ace'),
          bytearray.fromhex('d88f1d9b71d0a159f11b288478182916'),
@@ -48,36 +50,34 @@ wf_large = 4096
 
 
 def printKDF(banner, hashFunction, input, outlen):
-    global h
-    output = bytearray(outlen)
-    Makwa.kdf(Makwa(123,hashFunction), input, output)
+    output = Makwa(makeMakwaPrivateKey(priv2048).modulus, hashFunction).kdf(input, outlen)
     print(banner)
-    print("input", input)
-    print("output", output)
-    print('\n')
+    print("input: "+bytes_to_str(input))
+    print("output: "+bytes_to_str(output))
+    print('')
     h.update(output)
 
 
-def printKAT(banner, mpub, mpriv):
+def printKAT1(banner, mpub, mpriv):
     input = bytearray(150)
     for i in range(len(input)):
-        input[i] = 17 + 73 * i
+        input[i] = (17 + 73 * i) % 256
 
-    printKAT(banner, mpub, mpriv, input)
+    printKAT2(banner, mpub, mpriv, input)
     input = bytearray(13)
     for j in range(22):
         for k in range(13):
-            input[k] = 13 * j + k + 8
-        printKAT(banner, mpub, mpriv, input)
+            input[k] = (13 * j + k + 8) % 256
+        printKAT2(banner, mpub, mpriv, input)
 
 
-def printKAT(banner, mpub, mpriv, input):
-    for salt_num in salts:
-        salt = bytearray(salts[salt_num])
-        printKAT(banner, mpub, mpriv, input, salt, 10 + salt_num)
+def printKAT2(banner, mpub, mpriv, input):
+    for salt_num in range(len(salts)):
+        salt = salts[salt_num]
+        printKAT3(banner, mpub, mpriv, input, salt, 10 + salt_num)
 
 
-def printKAT(banner, mpub, mpriv, input, salt, ph_len):
+def printKAT3(banner, mpub, mpriv, input, salt, ph_len):
     printKAT(banner, mpub, mpriv, input, salt, False, 0)
     printKAT(banner, mpub, mpriv, input, salt, False, ph_len)
     printKAT(banner, mpub, mpriv, input, salt, True, 0)
@@ -85,38 +85,40 @@ def printKAT(banner, mpub, mpriv, input, salt, ph_len):
 
 
 def printKAT(banner, mpub, mpriv, input, salt, pre_hash, post_hash_len):
-    global wf_small, wf_large, h
+    global wf_small, wf_large
     h1 = Makwa(mpub.n, mpub.h, pre_hash, post_hash_len, wf_small).hash(input, salt)
-    h2 = Makwa(mpriv.n, mpriv.h, post_hash_len, wf_small).hash(input, salt)
+    h2 = Makwa(mpriv.n, mpriv.h, pre_hash, post_hash_len, wf_small).hash(input, salt)
     check(equals(h1, h2))
-    out_sm_str = bytes_to_str(h2)
+    out_sm_str = mpub.encode_output(salt, pre_hash, post_hash_len, wf_small, h1)
     h3 = Makwa(mpub.n, mpub.h, pre_hash, post_hash_len, wf_large).hash(input, salt)
-    h4 = Makwa(mpriv.n, mpriv.h, post_hash_len, wf_large).hash(input, salt)
+    h4 = Makwa(mpriv.n, mpriv.h, pre_hash, post_hash_len, wf_large).hash(input, salt)
     check(equals(h3, h4))
-    out_lg_str = bytes_to_str(h4)
+    out_lg_str = mpub.encode_output(salt, pre_hash, post_hash_len, wf_large, h3)
     print(banner)
-    print("input", input)
-    print("salt", salt)
-    print("pre-hashing: ", pre_hash)
+    print("input: "+bytes_to_str(input))
+    print("salt: "+bytes_to_str(salt))
+    if pre_hash:
+        print("pre-hashing: true")
+    else:
+        print('pre-hashing: false')
     if post_hash_len == 0:
         print("post-hashing: false")
     else:
         print("post-hashing: ", post_hash_len)
-    print("bin", wf_small, h1)
-    print("bin", wf_large, h2)
-    print("str", wf_small, ": ", out_sm_str)
-    print("str", wf_large, ": ", out_lg_str)
-    print('\n')
+    print("bin"+str(wf_small)+": "+bytes_to_str(h1))
+    print("bin"+str(wf_large)+": "+bytes_to_str(h3))
+    print("str"+str(wf_small) + ": " + out_sm_str)
+    print("str"+str(wf_large) + ": " + out_lg_str)
+    print('')
     h.update(h1)
-    h.update(h2)
-    h.update(bytes(out_sm_str, "utf8"))
-    h.update(bytes(out_lg_str, "utf8"))
+    h.update(h3)
+    h.update(bytes(out_sm_str, "UTF-8"))
+    h.update(bytes(out_lg_str, "UTF-8"))
     if (not pre_hash) and post_hash_len == 0:
-        upi_1 = mpriv.unescrow(h1, salt, wf_small)
-        check(equals(upi_1, input))
-        upi_2 = mpriv.unescrow(h3, salt, wf_large)
-        check(equals(upi_2, input))
-
+        upi1 = unescrow(priv2048, h1,salt,mpriv.h,wf_small)
+        check(equals(upi1, input))
+        upi2 = unescrow(priv2048, h1, salt, mpriv.h, wf_small)
+        check(equals(upi2, input))
 
 def println(name, value):
     print(name, ": ")
@@ -133,17 +135,16 @@ class makeKAT:
         self.process()
 
     def process(self):
-        global h
         mod = decodePublic(pub2048)
         pkey = makeMakwaPrivateKey(priv2048)
         check(pkey.modulus == mod)
         mpub = Makwa(mod, sha256, False, 0, 1024)
-        mpriv = Makwa(pkey, sha256, False, 0, 1024)
+        mpriv = Makwa(makeMakwaPrivateKey(priv2048).modulus, sha256, False, 0, 1024)
 
         for i in range(200):
             input = bytearray(i)
             for j in range(i):
-                input[j] = 7 * i + 83 * j
+                input[j] = ( 7 * i + 83 * j ) % 256
             printKDF("KDF/SHA-256", sha256, input, 100)
             printKDF("KDF/SHA-512", sha512, input, 100)
 
@@ -151,25 +152,29 @@ class makeKAT:
         pi = bytes(pwd, "utf8")
         salt = bytearray.fromhex('C72703C22A96D9992F3DEA876497E392')
         ref = bytearray.fromhex('C9CEA0E6EF09393AB1710A08')
-        mpub_to_hash = Makwa(mpub, sha256, True, 12, 4096)
+        mpub_to_hash = Makwa(mod, sha256, False, 12, 4096)
         check(equals(ref, mpub_to_hash.hash(pi, salt)))
         detailed = mpub.encode_output(salt, False, 12, 4096, ref)
         print("2048-bit modulus, SHA-256")
-        print("input ", pi)
-        print("salt ", salt)
+        print("input: " + bytes_to_str(pi))
+        print("salt: " + bytes_to_str(salt))
         print("pre-hashing: false")
         print("post-hashing: 12")
-        print("bin4096 ", ref)
-        print("str4096: ", detailed)
+        print("bin4096: " + bytes_to_str(ref))
+        print("str4096: " + detailed)
         print()
         h.update(ref)
-        h.update(bytes(detailed, "utf8"))
+        h.update(bytes(detailed, 'UTF-8'))
 
-        printKAT("2048-bit modulus, SHA-256", mpub, mpriv)
+        printKAT1("2048-bit modulus, SHA-256", mpub, mpriv)
         mpub = Makwa(mod, sha512, False, 0, 1024)
-        mpriv = Makwa(pkey, sha512, False, 0, 1024)
-        printKAT("2048-bit modulus, SHA-512", mpub, mpriv)
+        mpriv = Makwa(makeMakwaPrivateKey(priv2048).modulus, sha512, False, 0, 1024)
+        printKAT1("2048-bit modulus, SHA-512", mpub, mpriv)
 
-        print("KAT digest", h.digest())
+        print("KAT digest: " + bytes_to_str(h.digest()))
 
 
+if __name__ == '__main__':
+    sys.stdout = open("kat.txt", "w")
+    makeKAT()
+    sys.stdout.close()

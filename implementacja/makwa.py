@@ -86,8 +86,7 @@ class Makwa:
         self.t = t
         self.h = h
         self.w = w
-        self.mod_id = bytes(8)
-        self.kdf(encode(self.n), self.mod_id)
+        self.mod_id = self.kdf(encode(n), 8)
 
     # 2.3 The KDF
     # Tested: OK
@@ -168,9 +167,8 @@ class Makwa:
 
     def encode_output(self, salt, pre_hash, post_hash_len, wf, tau):
         out = ""  # starting string
-        out += base64_custom_en(bytearray(str(self.mod_id), "utf8"), False)
+        out += base64_custom_en(self.mod_id, False)
         out += "_"
-
         # pre-/post-hashing flag
         if pre_hash:
             if post_hash_len > 0:
@@ -186,16 +184,16 @@ class Makwa:
         j = 0
         # ensure wf = (2 or 3)*2^j, where j is an integer
         while wf_proc > 3 and (wf & 1) == 0:
-            wf_proc /= 2
+            wf_proc = wf_proc // 2
             j += 1
             if wf_proc == 2 or wf_proc == 3:
                 out += str(wf_proc)
                 out += str(j)
         out += '_'
-        out += base64_custom_en(bytearray(str(salt), "utf8"), False)
+        out += base64_custom_en(salt, False)
         out += "_"
-        out += base64_custom_en(bytearray(str(tau), "utf8"), False)
-
+        out += base64_custom_en(tau, False)
+        return out
 
 
 def main():
