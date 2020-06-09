@@ -106,7 +106,7 @@ class Makwa:
         V = hmac.new(K, msg=V, digestmod=self.h).digest()
         # 5. K <- HMAC_K(V || 0x01 || m)
         K = hmac.new(K, msg=(V + b'\x01' + m), digestmod=self.h).digest()
-        # 6. V < - HMAC_K(V) * /
+        # 6. V < - HMAC_K(V)
         V = hmac.new(K, msg=V, digestmod=self.h).digest()
         # 7. Set T to an empty sequence.
         T = b''

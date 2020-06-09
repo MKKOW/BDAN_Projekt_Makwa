@@ -371,7 +371,7 @@ def main():
         'ee' '3b' 'fe' 'fe'
         'c4' 'f3' 'f5' 'b3'
     )
-    print('MoInverse(7,20): '+str(modInverse(7, 20)))
+    print('ModInverse(7,20): '+str(modInverse(7, 20)))
     mpriv = makeMakwaPrivateKey(PRIV2048)
     print('Modulus from priv: '+bytes_to_str(encode(mpriv.modulus)))
     print('Modulus from exported public: '+bytes_to_str(encode(decodePublic(mpriv.exportPublic()))))

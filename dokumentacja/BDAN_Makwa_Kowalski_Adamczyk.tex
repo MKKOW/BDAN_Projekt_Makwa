@@ -18,7 +18,7 @@
 %------------------------------------------------------------------------
 % Dane do strony tytułowej
 
-\title{Dokumentacja implementacji algorytmu Makwa w Pythonie \\ Bezpieczeństwo Danych}
+\title{Dokumentacja implementacji algorytmu Makwa w języku Python \\ Bezpieczeństwo Danych}
 
 \author{Mikołaj Kowalski\\Witold Adamczyk}
 
@@ -41,5 +41,182 @@
 % Automatycznie generowany spis treści
 \tableofcontents
 %------------------------------------------------------------------------
+\section{Wstęp}
+Zaimplementowaliśmy następujące funkcje algorytmu Makwa:
+\begin{itemize}
+	\item \textit{Key-Derivation Function}
+	\item Kodowanie i dekodowanie liczb całkowitych
+	\item \textit{Pre-Hashing}
+	\item \textit{Core Hashing}
+	\item \textit{Post-Hashing}
+	\item \textit{Unescrow}
+	\item Generacja pliku \textit{kat.txt}
+	\item Generacja losowego klucza prywatnego
+	\item Eksport stanu instancji algorytmu
+\end{itemize}
+Elementy nie zaimplementowane:
+\begin{itemize}
+	\item \textit{Delegation}
+	\item \textit{Work Factor Increase}
+	\item \textit{Fast path}
+	\item Generacja \textit{soli}
+\end{itemize}
+W ramach naszej implementacji stworzyliśmy następujące pliki:
+\begin{itemize}
+	\item \textit{makwa.py} zawierający klasę Makwa oraz funkcje \textit{KDF, Unescorow, Pre-Hashing, Post-Hashing, Core Hashing} wraz z funkcją eksportującą stan instancji
+	\item \textit{makwakeys.py} zawierający klasę MakwaPrivateKey która, wraz z funkcjami pomocniczymi, umożliwia wczytanie klucza prywatnego, klucza publicznego oraz odpowiedni eksport tych kluczy
+	\item \textit{encoding.py} zawierający pomocnicze funkcje kodujące i dekodujące liczby oraz formatujące odpowiednio napisy.
+	\item \textit{modInverse.py} zawierający funkcję \textit{modInverse($a$, $m$)} umożliwiającą znalezienie liczby $a^{-1}$ takiej że: $$a\cdot a^{-1}=_m1$$
+	Implementacja znaleziona pod adresem \url{https://www.geeksforgeeks.org/multiplicative-inverse-under-modulo-m/}
+	\item \textit{selftest.py} zawierającą funkcję \textit{check} która była przez nas używana znajdowania błedów w implementacji
+	\item \textit{makeKat.py} umożliwiający stworzenie pliku \textit{kat.txt} umożliwiającego sprawdzenie poprawności naszej implementacji.
+\end{itemize}
+Poza testem implementacji za pomocą \textit{makeKat} mikro testy poszczególnych funkcji znajdują się w funkcjach \textit{main()} w plikach \textit{makwakeys.py} oraz \textit{makwa.py}
 
+Zaimplementowaliśmy również podstawowe komunikaty błędów w przypadku podania błędnych parametrów w niektórych funkcjach
+
+W części funkcji bazowaliśmy głownie na opisie zawartym w specyfikacji, a w innych opieraliśmy się na udostępnionej nam implementacji Makwy w języku Java
+\section{Implementacja podstawowych funkcji}
+\subsection{Konstrukcja klasy Makwa}
+Klasa \textit{Makwa} posiada następujące pola:
+\begin{itemize}
+	\item n - liczba całkowita, główny parametr uzywany do haszowania hasła (\textit{modulus}) (musi zostac podany)
+	\item h - funkcja haszująca używana w danej instancji klasy, nasza implementacja umożliwia wykorzystanie tylko SHA256 lub SHA512. (domyślnie SHA256)
+	\item preHashing - \textit{boolean} określający czy ma być przeprowadzony proces Pre-Hashing. (domyślnie \textit{True})
+	\item t - liczba całkowita, określająca długość wyniku z funkcji Post-Hashing, gdy t=0 proces ten nie następuje. (domyślnie 0)
+	\item w - \textit{work\_factor}, liczba całkowita wpływająca na trudność złamania hasła
+	\item mod\_id - ID modulusa generowane jako wynik funkcji kdf(n, 8). Wykorzystywane przy eksporcie stanu instancji.
+\end{itemize}
+Metody klasy Makwa:
+\begin{itemize}
+	\item kdf(self, m, s) - przeprowadzająca operację KDF na liczbie m, wykorzystując do tego funkcję haszująca h określonej instancji klasy. Wynik jest rozszerzany lub obcinany do długości s.
+	\item pre\_hashing(self, password) - przeprowadza proces Pre-Hashing jeśli pole preHashing zostało ustawione na True
+	\item post\_hashing(self, hash) - przeprowadza proces Post-Hashing jeśli pole t zostało na liczbę większą od 0
+	\item hash(self, password, salt) - przeprowadza proces Core-Hashing
+	\item check(self, ref, hashed) - zwraca wartość wyrażenia ref==hashed, używana w trakcie testów
+	\item encode\_output(self, salt, pre\_hash, post\_hash\_len,wf,tau) zwraca napis określający parametry instancji klasy o n równym self.n oraz pozostałych parametrach jak podane. (tau to wynik metody hash)
+	Zwrócony napis ma format: \textit{base64(mod\_id)\_xddd\_base64(salt)\_base64(tau)}Gdzie \textit{x} to odpowiedni (określony w specyfkacji) znak definiujący ustawienia Pre- i Post- Hashing, \textit{abc} to liczby określające wartość work factor ($wf=a\cdot 2^{10b + c}$). Zapis \textit{base64(x)} wskazuje zapis napisu (liczby zapisanej heksadecymalnie) jako w formacie o podstawie 64.
+\end{itemize}
+\subsection{Konstrukcja klasy MakwaPrivateKey}
+\subsection{KDF}
+KDF (\textit{Key-Derivation Function}) została zaimplementowana bardzo dokładnie odwzorowując kroki przedstawione w specyfikacji.
+\begin{lstlisting}[language=Python]
+def kdf(self, m, s):
+	r = 32
+	if self.h == sha256:
+		r = 32
+	if self.h == sha512:
+		r = 64
+	# 1. V <- 0x01 0x01 0x01 ... 0x01
+	V = b'\x01' * r
+	# 2. K <- 0x00 0x00 0x00 ... 0x00
+	K = b'\x00' * r
+	# 3. K < - HMAC_K(V | | 0x00 | | m)
+	K = hmac.new(K, msg=(V + b'\x00' + m), digestmod=self.h).digest()
+	# 4. V < - HMAC_K(V)
+	V = hmac.new(K, msg=V, digestmod=self.h).digest()
+	# 5. K <- HMAC_K(V || 0x01 || m)
+	K = hmac.new(K, msg=(V + b'\x01' + m), 		digestmod=self.h).digest()
+	# 6. V < - HMAC_K(V)
+	V = hmac.new(K, msg=V, digestmod=self.h).digest()
+	# 7. Set T to an empty sequence.
+	T = b''
+	# 8. While the length of T is not at least equal to s (the requested output length), do the
+	# following: V <- HMAC_K(V), T <- T||V
+	while len(T) < s:
+		V = hmac.new(K, msg=V, digestmod=self.h).digest()
+	T += V
+	# The output Hs(m) then consists in the s leftmost bytes of T.
+	return T[:s]
+\end{lstlisting}
+\subsection{Kodowanie liczb}
+Kodowanie i dekodowanie liczb (konwersja na zapis heksadecymalny i odwrotnie) bazuje na opisie w specyfikacji, lecz również uwzględnia właściwości języka Python.
+
+Podstawowe funkcje kodujące i dekodujące:
+\begin{lstlisting}[language=Python]
+# 2.4 Integer Encoding
+# I2OSP as well
+# Tested: OK
+def encode(x, outlen=None):
+	ret_x = b''
+	while x != 0:
+		ret_x = pack('=B', x & 0xff) + ret_x
+		x >>= 8
+	if outlen and len(ret_x) < outlen:
+		ret_x = b'\x00' * (outlen - len(ret_x)) + ret_x
+	return ret_x
+
+
+# To test encoding
+# OS2IP as well
+# Tested: OK
+def decode(ret_x):
+	x = 0
+	k = len(ret_x)
+	for i in range(k):
+		x = x + ret_x[i] * pow(2, 8 * (k - 1 - i))
+	return x
+\end{lstlisting}
+Funkcje wykorzystywane do formatowania, konieczne do poprawy czytelności wyników:
+\begin{lstlisting}[language=Python]
+# Used only for formatting
+def byte_to_str(i):
+	if i == b'\x00' or i is None:
+		return '00'
+	ret = ''
+	ret = str(hex(i))
+	ret = ret[2:]
+	if len(ret) == 1:
+		ret = '0' + ret
+	return ret
+
+
+# Used only for formatting
+def bytes_to_str(x):
+	ret = ''
+	for i in x:
+		ret += byte_to_str(i)
+	return ret
+\end{lstlisting}
+Funkcja kodująca liczbę zapisaną w systemie heksadecymalnym jako liczbę zapisaną w systemie o podstawie 64
+\begin{lstlisting}[language=Python]
+# Base64 encoding without newlines or equality signs
+def base64_custom_en(buf, with_equal):
+	BASE64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+	out = ""
+	length = len(buf)
+	off = 0
+	while length >= 3:
+		w = buf[off] & 0xFF
+		off += 1
+		w = (w << 8) + (buf[off] & 0xFF)
+		off += 1
+		w = (w << 8) + (buf[off] & 0xFF)
+		off += 1
+		out += BASE64[w >> 18]
+		out += BASE64[(w >> 12) & 0x3F]
+		out += BASE64[(w >> 6) & 0x3F]
+		out += BASE64[w & 0x3F]
+		length -= 3
+	if length == 1:
+		w1 = buf[off] & 0xFF
+		out += BASE64[w1 >> 2]
+		out += BASE64[(w1 << 4) & 0x3F]
+	if with_equal:
+		out += "=="
+	elif length == 2:
+		w2 = ((buf[off] & 0xFF) << 8) + (buf[off + 1] & 0xFF)
+		out += BASE64[w2 >> 10]
+		out += BASE64[(w2 >> 4) & 0x3F]
+		out += BASE64[(w2 << 2) & 0x3F]
+		if with_equal:
+			out += "=="
+return out
+\end{lstlisting}
+\subsection{Input Pre-Hashing}
+\subsection{Core Hashing}
+\subsection{Post-Hashing}
+\section{Implementacja zaawansowanych funkcji}
+\subsection{Unescrow}
+\subsection{Generacja klucza prywatnego}
 \end{document}
