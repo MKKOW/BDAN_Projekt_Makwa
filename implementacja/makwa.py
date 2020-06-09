@@ -199,6 +199,12 @@ class Makwa:
         out += base64_custom_en(tau, False)
         return out
 
+    def set_new_wf(self, hash, new_wf):
+        hash_post_set = hash
+        for _ in range(new_wf - self.w):
+            hash_post_set = hash_post_set.pow(hash_post_set, 2, self.n)
+        return hash_post_set
+
 
 def main():
     ret_x = encode(255, 5)

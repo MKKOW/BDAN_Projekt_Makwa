@@ -77,3 +77,23 @@ def base64_custom_en(buf, with_equal):
         if with_equal:
             out += "=="
     return out
+
+
+def mpi_en(integer):
+    if integer < 0:
+        raise ValueError("Cannot encode MPI: negative")
+    header_1 = (integer.bit_length() / 8) // 256
+    header_2 = (integer.bit_length() / 8) % 256
+    body = integer.to_bytes((integer.bit_length() // 8) + 1, 'big')
+    out = bytearray()
+    out.append(header_1)
+    out.append(header_2)
+    out.append(body)
+    print(bytes_to_str(out))
+    return out
+
+
+def mpi_de(byte):
+    length = int(byte[0:3], 16)
+    buf = byte[4:3+length]  # or (len+4)-1
+    return buf
