@@ -53,11 +53,11 @@ Zaimplementowaliśmy następujące funkcje algorytmu Makwa:
 	\item Generacja pliku \textit{kat.txt}
 	\item Generacja losowego klucza prywatnego
 	\item Eksport stanu instancji algorytmu
+	\item Delegacja (generowanie, zapis i odczyt parametrów, tworzenie par maskujących)
+	\item Zmiana \textit{work factor} (ustawienie nowej wartości/zmiana o pewną wartość)
 \end{itemize}
 Elementy nie zaimplementowane:
 \begin{itemize}
-	\item \textit{Delegation}
-	\item \textit{Work Factor Increase}
 	\item \textit{Fast path}
 	\item Generacja \textit{soli}
 \end{itemize}
@@ -70,8 +70,9 @@ W ramach naszej implementacji stworzyliśmy następujące pliki:
 	Implementacja znaleziona pod adresem \url{https://www.geeksforgeeks.org/multiplicative-inverse-under-modulo-m/}
 	\item \textit{selftest.py} zawierającą funkcję \textit{check} która była przez nas używana znajdowania błedów w implementacji
 	\item \textit{makeKat.py} umożliwiający stworzenie pliku \textit{kat.txt} umożliwiającego sprawdzenie poprawności naszej implementacji.
+	\item \textit{deleggen.py} umożliwiający wygenerowanie żądania delegacji i eksport w postaci binarnej
 \end{itemize}
-Poza testem implementacji za pomocą \textit{makeKat} mikro testy poszczególnych funkcji znajdują się w funkcjach \textit{main()} w plikach \textit{makwakeys.py} oraz \textit{makwa.py}
+Poza testem implementacji za pomocą \textit{makeKat} mikro testy poszczególnych funkcji znajdują się w funkcjach \textit{main()} w plikach \textit{makwakeys.py}, \textit{makwa.py} i \textit{deleggen.py}
 
 Zaimplementowaliśmy również podstawowe komunikaty błędów w przypadku podania błędnych parametrów w niektórych funkcjach
 
@@ -96,6 +97,9 @@ Metody klasy Makwa:
 	\item check(self, ref, hashed) - zwraca wartość wyrażenia ref==hashed, używana w trakcie testów
 	\item encode\_output(self, salt, pre\_hash, post\_hash\_len,wf,tau) zwraca napis określający parametry instancji klasy o n równym self.n oraz pozostałych parametrach jak podane. (tau to wynik metody hash)
 	Zwrócony napis ma format: \textit{base64(mod\_id)\_xddd\_base64(salt)\_base64(tau)}Gdzie \textit{x} to odpowiedni (określony w specyfkacji) znak definiujący ustawienia Pre- i Post- Hashing, \textit{abc} to liczby określające wartość work factor ($wf=a\cdot 2^{10b + c}$). Zapis \textit{base64(x)} wskazuje zapis napisu (liczby zapisanej heksadecymalnie) jako w formacie o podstawie 64.
+	\item set\_new\_wf(self, output, new\_wf) odczytuje napis określający parametry instancji klasy, na podstawie których wykonuje zmianę (w obecnej implementacji tylko na większy) \textit{workfactor}
+	i zwraca nowy napis po przeprowadzeniu zmiany \textit{workfactor}.
+	\item change\_wf(self, privkey, hash, diff) przeprowadza zmianę \textit{work factor} o określoną wartość. Klucz prywatny \textit{privkey} nie musi być podany, ale jego obecność jest konieczna jeśli zamierza się zmniejszyć wartość \textit{work factor} (ujemna wartość argumentu \textit{diff})
 \end{itemize}
 \subsection{Konstrukcja klasy MakwaPrivateKey}
 Pola klasy \textit{MakwaPrivateKey}:
@@ -118,6 +122,28 @@ Oprócz tego w pliku \textit{makwakeys.py} zaimplementowaliśmy funkcje:
 	\item generatePrivateKey(size) - generuje obiekt klasy MakwaPrivateKey stworzony z losowego klucza prywatnego o długości \textit{size} bitów
 \end{itemize}
 Pozostałe funkcje znajdujące się w pliku są funkcja pomocniczymi stworzonymi dla ułatwienia korzystania z funkcji wyżej wymienionych.
+\subsection{Konstrukcja klasy Delegation}
+Pola klasy \textit{Delegation}:
+\begin{itemize}
+	\item modulus
+	\item \textit{work factor}
+	\item \textit{alpha\_arr}, \textit{beta\_arr}: Zbiory liczb $\alpha$ i $\beta$
+	\item \textit{with\_gen} - określa, czy delegacja zawiera generator reszt kwadratowych
+\end{itemize}
+Metody klasy \textit{Delegation}:
+\begin{itemize}
+	\item export(self) - tworzy sekwencję bajtów delegacji, zawierającą wszystkie informacje o parametrach
+	\item createMaskPair(self) - służy do tworzenia pary maskującej
+\end{itemize}
+Inne metody w pliku \textit{deleggen.py}
+\begin{itemize}
+	\item generate(mparam, wf, param\_type) - służy do wygenerowania nowej delegacji na podstawie podanych argumentów:
+	\subitem mparam - zakodowany modulus instancji Makwa lub klucz prywatny
+	\subitem wf - \textit{work factor}
+	\subitem param\_type - Opcja generacji (losowe 300 par liczb, rozszerzenie[obliczenie modulus+64 par liczb], jedna para liczb)
+	\item generate\_rnd\_pairs(mkw, wf) - generuje 300 losowych par liczb, po czym wykorzystuje je do utworzenia nowej delegacji
+	\item makeDelegation(encoded) - wczytuje wyeksportowaną wcześniej delegację
+\end{itemize}
 \subsection{KDF}
 KDF (\textit{Key-Derivation Function}) została zaimplementowana bardzo dokładnie odwzorowując kroki przedstawione w specyfikacji.
 \begin{lstlisting}[language=Python]
@@ -181,22 +207,22 @@ def decode(ret_x):
 Implementacja obu funkcji opiera się wprost na opisie w sekcji \textit{2.4 Integer Encoding} ze specyfikacji.
 \subsection{Core Hashing}
 Główna funkcja haszująca, podobnie jak implementacja \textit{KDF} opierała się na wprost na opisie w specyfikacji.
-\begin{lstlisting}[language=Python]
+\begin{lstlisting}[language=Python,mathescape]
 # 2.6 Core Hashing
 # Basic Test: OK
 def hash(self, password, salt):
 	password = self.pre_hashing(password)
 	# 1. Let S be the following byte sequence (called the padding):
 	# (u = len(password) (in bytes))
-	# S = H_(k−2−u)(salt || password || u)
+	# S = H_(k-2-u)(salt || password || u)
 	k = len(encode(self.n))
 	u = len(password)
-	# u must be such that u ≤ 255 and u ≤ k − 32
+	# u must be such that u $\leq$ 255 and u $\leq$ k - 32
 	if u > 255 or u > k - 32:
 		raise ValueError('Password is too long')
 	S = self.kdf(salt + password + pack('=B', u), k - 2 - u)
 	# 2. Let X be the following byte sequence:
-	# X = 0x00 | | S | | π | | u
+	# X = 0x00 | | S | | $\pi$ | | u
 	X = b'\x00' + S + password + pack('=B', u)
 	# 3. Let x be the integer obtained by decoding X with OS2IP.
 	x = decode(X)

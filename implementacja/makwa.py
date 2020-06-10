@@ -4,7 +4,7 @@ from hashlib import sha256
 from hashlib import sha512
 from struct import pack
 
-from encoding import decode, encode, bytes_to_str, base64_custom_en
+from encoding import decode, encode, bytes_to_str, base64_custom_en, base64_custom_de
 from makwakeys import MAGIC_PUBKEY, MAGIC_PUBKEY_WITHGEN, MAGIC_PRIVKEY, MAGIC_PRIVKEY_WITHGEN, getMagic, \
     makeMakwaPrivateKey, decodePublic
 
@@ -199,11 +199,77 @@ class Makwa:
         out += base64_custom_en(tau, False)
         return out
 
-    def set_new_wf(self, hash, new_wf):
-        hash_post_set = hash
-        for _ in range(new_wf - self.w):
-            hash_post_set = hash_post_set.pow(hash_post_set, 2, self.n)
-        return hash_post_set
+    # Change work factor TO a value
+    def set_new_wf(self, output, new_wf):
+        wf_proc = new_wf
+        # ensure new wf = (2 or 3)*2^j, where j is an integer
+      #  while wf_proc > 3 and (new_wf & 1) == 0:
+      #      wf_proc = wf_proc // 2
+       #     if not (wf_proc == 2 or wf_proc == 3):
+       #        raise ValueError("Incorrect work factor")
+        subs = str.split(output,'_')
+        if len(subs[0]) != 11 or len(subs[1]) != 4 or len(subs) != 4:
+            raise ValueError("Incorrect Makwa output")
+        smod = base64_custom_de(subs[0], True, False)
+        h_par = subs[1][0]
+        if subs[1][1] == '2':
+            wf = 2
+        elif subs[1][1] == '3':
+            wf = 3
+        else:
+            raise ValueError("Incorrect Makwa output")
+        wlh = ord(subs[1][2]) - ord('0')
+        wll = ord(subs[1][3]) - ord('0')
+        if wlh < 0 or wlh > 9 or wll < 0 or wlh > 9:
+            raise ValueError("Incorrect Makwa output")
+        wl = 10 * wlh + wll
+        if wl > 29:
+            raise ValueError("Too large work factor")
+        wf <<= wl
+        salt = base64_custom_de(subs[2], True, False)
+        tau = base64_custom_de(subs[3], True, False)
+        if len(tau) == 0:
+            raise ValueError("Incorrect Makwa output")
+        if h_par == 'n':
+            pre_hash = False
+            post_hash_len = 0
+        elif h_par == 'r':
+            pre_hash = True
+            post_hash_len = 0
+        elif h_par == 's':
+            pre_hash = False
+            post_hash_len = len(tau)
+        elif h_par == 'b':
+            pre_hash = True
+            post_hash_len = len(tau)
+        else:
+            raise ValueError("Incorrect Makwa output")
+
+
+        if post_hash_len != 0:
+            raise ValueError("Can't set new work factor with post-hashing applied")
+        if wf > new_wf:
+            raise NotImplementedError("Setting smaller work factors this way is unsupported")
+        out = self.change_wf(None, tau, new_wf - wf)
+        return self.encode_output(salt, pre_hash, 0, wf, out)
+
+    # Change work factor BY a value
+    def change_wf(self, privkey, hash, diff):
+        y = decode(hash)
+        if diff == 0:
+            return hash
+        if diff > 0:
+            return encode(pow(y, pow(2, diff), self.n))
+        else:
+            if privkey is None:
+                raise ValueError("Cant decrease without private key")
+            p = privkey.p
+            q = privkey.q
+            ep = sqrtExp(p, -diff)
+            eq = sqrtExp(q, -diff)
+            yp = pow((y % p), ep, p)
+            yq = pow((y % q), eq, q)
+            return encode(chinese_remainder(p, q, privkey.invQ, yp, yq))
 
 
 def main():
@@ -385,7 +451,22 @@ def main():
     print(decodePublic(PUB2048) == makeMakwaPrivateKey(PRIV2048).modulus)
     hashed2 = makeMakwa(PRIV2048, sha256, False, 0, 4096).hash(pwd_bytes, salt0)
     print(unescrow(PRIV2048, hashed2, salt0, sha256, 4096))
+    mkw = makeMakwa(PRIV2048, sha256, False)
+    out = mkw.encode_output(salt0, mkw.preHashing, mkw.t, mkw.w, hashed2)
+    out2 = mkw.set_new_wf(out, 4192)
+    out_ch = mkw.encode_output(salt0, mkw.preHashing, mkw.t, 4192, mkw.change_wf(None, hashed2, 96))
+    mkw2 = makeMakwa(PRIV2048, sha256, False, 0, 4192)
+    out3 = mkw2.encode_output(salt0, mkw2.preHashing, mkw2.t, mkw2.w, mkw2.hash(pwd_bytes, salt0))
+    print("\nWF 4096:")
+    print(out)
+    print("\nWF 4192 (new makwa): ")
+    print(out3)
+    print("\nWF 4192 (set_new): ")
+    print(out2)
+    print("\nWF 4192 (change +96): ")
+    print(out_ch)
 
+    print("\nequality of all WF 4192:", out2 == out3 == out_ch)
 
 if __name__ == '__main__':
     main()

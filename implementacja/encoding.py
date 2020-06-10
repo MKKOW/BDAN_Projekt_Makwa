@@ -1,4 +1,5 @@
 from struct import pack
+from math import ceil
 import base64
 
 # 2.4 Integer Encoding
@@ -78,18 +79,70 @@ def base64_custom_en(buf, with_equal):
             out += "=="
     return out
 
+def base64_custom_de(string, reject_bad, with_equal):
+    out = bytearray()
+    n = len(string)
+    num_eq = int(0)
+    acc = int(0)
+    k = int(0)
+    for i in range(n):
+        d = ord(string[i])
+        if ord('A') <= d <= ord('Z'):
+            d -= ord('A')
+        elif ord('a') <= d <= ord('z'):
+            d -= ord('a') - 26
+        elif ord('0') <= d <= ord('9'):
+            d -= ord('0') - 52
+        elif d == ord('+'):
+            d = 62
+        elif d == ord('/'):
+            d = 63
+        elif d == ord('='):
+            if not with_equal or num_eq >= 2:
+                raise IOError("unexpected '=' sign")
+            num_eq += 1
+            d = -1
+        else:
+            if reject_bad:
+                raise ValueError("invalid Base64 string")
+            continue
+        if d < 0:
+            d = 0
+        else:
+            if num_eq != 0:
+                raise ValueError("invalid Base64 termination")
+        acc = (acc << 6) + d
+        k += 1
+        if k == 4:
+            out.append(acc // pow(256, 2))
+            out.append((acc // 256) % 256)
+            out.append(acc % 256)
+            acc = 0
+            k = 0
+    if k != 0:
+        if k == 1 or with_equal:
+            raise ValueError("truncated base64 input")
+        if k == 2:
+            out.append(acc // 16)
+        if k == 3:
+            out.append(acc // 1024)
+            out.append(acc // 4 % 256)
+    return out
+
 
 def mpi_en(integer):
     if integer < 0:
         raise ValueError("Cannot encode MPI: negative")
-    header_1 = (integer.bit_length() / 8) // 256
-    header_2 = (integer.bit_length() / 8) % 256
-    body = integer.to_bytes((integer.bit_length() // 8) + 1, 'big')
+    byte_len = integer.bit_length() / 8
+    header_1 = int(ceil((integer.bit_length() / 8) / 256))
+    header_2 = int(ceil(integer.bit_length() / 8) % 256)
+    length = integer.bit_length()//8
+    body = integer.to_bytes(header_1 * 256 + header_2, 'big')
     out = bytearray()
-    out.append(header_1)
-    out.append(header_2)
-    out.append(body)
-    print(bytes_to_str(out))
+
+    out += header_1.to_bytes(1, 'big')
+    out += header_2.to_bytes(1, 'big')
+    out+=(body)
     return out
 
 
